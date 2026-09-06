@@ -3,7 +3,35 @@ cd /d "%~dp0"
 
 set "PYEXE=%~dp0python\python.exe"
 if not exist "%PYEXE%" set "PYEXE=%~dp0.venv\Scripts\python.exe"
-if not exist "%PYEXE%" set "PYEXE=python"
+if not exist "%PYEXE%" (
+    set "PYEXE="
+    where python >nul 2>nul
+    if not errorlevel 1 set "PYEXE=python"
+)
+
+if not defined PYEXE goto prepare_python
+"%PYEXE%" -c "import fastapi, uvicorn, requests, httpx, PIL, pydantic, multipart, websockets" >nul 2>nul
+if errorlevel 1 goto prepare_python
+goto python_ready
+
+:prepare_python
+echo First run: preparing Python and required packages. Internet access is required...
+call "%~dp0安装依赖.bat" /nopause
+if errorlevel 1 (
+    echo.
+    echo Automatic setup failed. See the error above.
+    pause
+    exit /b 1
+)
+set "PYEXE=%~dp0python\python.exe"
+if not exist "%PYEXE%" set "PYEXE=%~dp0.venv\Scripts\python.exe"
+if not exist "%PYEXE%" (
+    echo Python setup completed, but its executable could not be found.
+    pause
+    exit /b 1
+)
+
+:python_ready
 
 rem Read the current Windows user proxy for Codex/GPT Image helpers.
 set "SYSTEM_PROXY="

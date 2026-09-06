@@ -1,8 +1,10 @@
 param(
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+$script:InstalledCodexPath = ""
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..\..")
 $logDir = Join-Path $root "logs"
@@ -13,7 +15,9 @@ Start-Transcript -Path $logPath -Force | Out-Null
 function Pause-End {
     Write-Host ""
     Write-Host "Log: $logPath"
-    Read-Host "Press Enter to close"
+    if (-not $NonInteractive) {
+        Read-Host "Press Enter to close"
+    }
     Stop-Transcript | Out-Null
 }
 
@@ -63,11 +67,24 @@ function Get-LocalGptImage2SkillPackages {
 }
 
 function Get-WindowsArchTag {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-    if ($arch -eq "arm64") {
+    $arch = ""
+    try {
+        $property = [System.Runtime.InteropServices.RuntimeInformation].GetProperty("OSArchitecture")
+        if ($property) {
+            $arch = $property.GetValue($null).ToString().ToLowerInvariant()
+        }
+    } catch {}
+    if (-not $arch) {
+        $arch = [string]$env:PROCESSOR_ARCHITEW6432
+        if (-not $arch) {
+            $arch = [string]$env:PROCESSOR_ARCHITECTURE
+        }
+        $arch = $arch.ToLowerInvariant()
+    }
+    if ($arch -match "arm64|aarch64") {
         return "arm64"
     }
-    if ($arch -eq "x64") {
+    if ($arch -match "amd64|x64|x86_64" -or [Environment]::Is64BitOperatingSystem) {
         return "x64"
     }
     return ""
@@ -175,6 +192,60 @@ function Install-WithNpmFallback {
         throw "npm fallback install failed with exit code $LASTEXITCODE."
     }
     Add-NpmPrefixToPath -NpmCommand $npm
+    try {
+        $prefix = (& $npm config get prefix 2>$null | Select-Object -First 1).Trim()
+        $candidate = Join-Path $prefix "codex.cmd"
+        if (Test-Path -LiteralPath $candidate) {
+            $script:InstalledCodexPath = $candidate
+        }
+    } catch {}
+}
+
+function Add-KnownCodexLocationsToPath {
+    $locations = @()
+    if ($env:LOCALAPPDATA) {
+        $locations += (Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin")
+    }
+    $npm = Get-NpmCommand
+    if ($npm) {
+        try {
+            $locations += ((& $npm config get prefix 2>$null | Select-Object -First 1).Trim())
+        } catch {}
+    }
+    foreach ($location in $locations) {
+        if ($location -and (Test-Path -LiteralPath $location) -and (($env:PATH -split ';') -notcontains $location)) {
+            $env:PATH = "$location;$env:PATH"
+        }
+    }
+}
+
+function Get-PreferredCodexPath {
+    if ($script:InstalledCodexPath -and (Test-Path -LiteralPath $script:InstalledCodexPath)) {
+        return $script:InstalledCodexPath
+    }
+    $candidates = @()
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin\codex.exe")
+    }
+    $npm = Get-NpmCommand
+    if ($npm) {
+        try {
+            $prefix = (& $npm config get prefix 2>$null | Select-Object -First 1).Trim()
+            $candidates += (Join-Path $prefix "codex.cmd")
+        } catch {}
+    }
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+    foreach ($name in @("codex.exe", "codex.cmd", "codex")) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($command) {
+            return $command.Source
+        }
+    }
+    return ""
 }
 
 function Install-GptImage2Skill {
@@ -206,6 +277,12 @@ function Install-GptImage2Skill {
     Add-NpmPrefixToPath -NpmCommand $npm
 }
 
+if ($SelfTest) {
+    Write-Host ("Windows architecture: {0}" -f (Get-WindowsArchTag))
+    Stop-Transcript | Out-Null
+    exit 0
+}
+
 try {
     Write-Host "=== OpenAI Codex CLI install/update ==="
     Write-Host "Workspace: $root"
@@ -216,27 +293,37 @@ try {
         Write-Host "CODEX_NON_INTERACTIVE=1"
     }
 
-    Write-Host "Installing/updating Codex CLI with the official OpenAI standalone installer..."
-    try {
-        irm https://chatgpt.com/codex/install.ps1 | iex
-    } catch {
-        Write-Host "Standalone installer failed: $($_.Exception.Message)"
+    if ($PSVersionTable.PSVersion.Major -lt 7 -and (Get-NpmCommand)) {
+        Write-Host "Windows PowerShell 5.1 detected. Using the official npm package for compatibility."
         Install-WithNpmFallback
+    } else {
+        Write-Host "Installing/updating Codex CLI with the official OpenAI standalone installer..."
+        try {
+            irm https://chatgpt.com/codex/install.ps1 | iex
+        } catch {
+            Write-Host "Standalone installer failed: $($_.Exception.Message)"
+            Install-WithNpmFallback
+        }
     }
     Install-GptImage2Skill
+    Add-KnownCodexLocationsToPath
     Write-Host ""
 
-    $codex = Get-Command codex -ErrorAction SilentlyContinue
-    if (-not $codex) {
+    $codexPath = Get-PreferredCodexPath
+    if (-not $codexPath) {
         Write-Host "Codex CLI was installed, but 'codex' is not available in this PowerShell PATH yet."
         Write-Host "Close this window, open a new PowerShell, then run: codex"
         Pause-End
         exit 2
     }
 
-    Write-Host "Codex CLI found: $($codex.Source)"
+    Write-Host "Codex CLI found: $codexPath"
+    if ([IO.Path]::GetExtension($codexPath) -in @(".exe", ".cmd")) {
+        Set-ApiEnvValue -Key "CODEX_BIN" -Value $codexPath
+        Write-Host "Project API/.env updated: CODEX_BIN"
+    }
     try {
-        & codex --version
+        & $codexPath --version
     } catch {
         Write-Host "Could not read Codex version in this session. Open a new PowerShell and run: codex --version"
     }
@@ -249,7 +336,7 @@ try {
 
     Write-Host ""
     Write-Host "Done. Run 'codex' in PowerShell to sign in and start using OpenAI Codex CLI."
-    Write-Host "You can also double-click CLI\windows\openai\start_openai_codex_cli.bat."
+    Write-Host "You can also double-click CLI\windows\openai\2-start_openai_codex_cli.bat."
     Pause-End
 } catch {
     Write-Host "Error: $($_.Exception.Message)"

@@ -34,9 +34,9 @@ https://www.fhl.mom/register?aff=86L574B4T2N9
 API使用教程：https://xcnk45dd0a92.feishu.cn/wiki/DRuEwOd8mi9d0sknkxPcCzTjn1b
 
 
-===非网盘会员====
+===GitHub下载版====
 
-无法保存python文件夹的，我上传了python.zip，可以下载压缩包解压到目录使用
+双击“启动服务.bat”即可。第一次运行会自动下载项目专用的便携 Python 并安装依赖，需要保持联网；无需另外寻找 python.zip。
 
 ---mac运行---
 

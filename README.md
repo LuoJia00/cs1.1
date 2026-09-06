@@ -9,11 +9,11 @@
 ## Windows 第一次使用
 
 1. 用 GitHub Desktop 克隆本仓库，建议放到 `D:\Infinite-Canvas`。
-2. 安装 Python 3.10 或更高版本，再双击 `安装依赖.bat`。脚本会创建本项目独立的 `.venv` 并安装依赖。
-3. 双击 `启动服务.bat`，浏览器访问 `http://127.0.0.1:3000/`。
+2. 双击 `启动服务.bat`。首次运行会自动下载项目专用的便携 Python 并安装依赖，完成后自动启动；需要能访问 python.org 和 pypi.org。
+3. 浏览器访问 `http://127.0.0.1:3000/`。以后仍然双击 `启动服务.bat` 即可。
 4. 在程序中填写自己的 API 配置；按需安装并登录外部 CLI。
 
-如果已有可运行的 Windows 整包，也可以单独复制其中的 `python` 文件夹过来。该环境不由 Git 管理。依赖锁定清单来自当前可运行的 Windows / Python 3.10 环境；其他系统仍需实际安装验证。
+如果电脑已经安装 Python 3.10 或更高版本，首次运行也可以使用它建立 `.venv`。自动下载的 `python` 环境不由 Git 管理。依赖锁定清单来自当前可运行的 Windows 环境；其他系统仍需实际安装验证。
 
 macOS 可执行 `python3 -m venv .venv`，然后 `.venv/bin/python -m pip install -r requirements-lock.txt`；使用现有 mac 启动脚本。Windows 自带的 `python` 文件夹不能在 macOS 使用。
 

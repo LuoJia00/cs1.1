@@ -17,9 +17,9 @@ GitHub 网页只用于查看代码；日常更新用 Desktop。原 LICENSE 要�
 
 1. 安装 GitHub Desktop 并登录自己的同一个账号。
 2. File → Clone repository → 选择你的仓库，存到 `D:\Infinite-Canvas` 等自己的目录。
-3. 准备 Python：从 https://www.python.org/downloads/windows/ 安装 Python 3.10+；或者从原来的 Windows 电脑单独复制能运行的 `python` 文件夹到项目根目录（需相同兼容架构）。
-4. 双击 `安装依赖.bat`，等到出现 Dependencies OK。
-5. 双击 `启动服务.bat`，打开 http://127.0.0.1:3000/ 。
+3. 双击 `启动服务.bat`。第一次会自动下载项目专用的便携 Python、安装依赖并启动，需要能访问 python.org 和 pypi.org。
+4. 等浏览器自动打开 http://127.0.0.1:3000/ 。以后启动仍然只需双击 `启动服务.bat`。
+5. 如果自动安装失败，可单独双击 `安装依赖.bat` 查看完整错误后重试。
 6. 在 API 页面填写配置。需要即梦等功能时，再安装并登录相应 CLI；浏览器插件也要在新电脑安装。
 
 ## 三、每次开始改代码前
