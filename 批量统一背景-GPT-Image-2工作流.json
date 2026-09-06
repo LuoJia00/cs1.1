@@ -1,0 +1,162 @@
+{
+  "format": "infinite-canvas-workflow",
+  "version": 1,
+  "name": "批量统一背景 - GPT Image 2",
+  "description": "图1至图5逐张作为主体，图6始终作为固定背景参考，串行生成5张统一背景结果。",
+  "nodes": [
+    {
+      "id": "subject_image_1",
+      "type": "image",
+      "x": 0,
+      "y": 0,
+      "url": "",
+      "name": "主体图1（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "subject_image_2",
+      "type": "image",
+      "x": 300,
+      "y": 0,
+      "url": "",
+      "name": "主体图2（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "subject_image_3",
+      "type": "image",
+      "x": 600,
+      "y": 0,
+      "url": "",
+      "name": "主体图3（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "subject_image_4",
+      "type": "image",
+      "x": 0,
+      "y": 390,
+      "url": "",
+      "name": "主体图4（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "subject_image_5",
+      "type": "image",
+      "x": 300,
+      "y": 390,
+      "url": "",
+      "name": "主体图5（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "background_image_6",
+      "type": "image",
+      "x": 600,
+      "y": 390,
+      "url": "",
+      "name": "固定背景图6（点击上传）",
+      "mediaKind": "image"
+    },
+    {
+      "id": "subject_loop",
+      "type": "loop",
+      "x": 930,
+      "y": 40,
+      "count": 5,
+      "mode": "serial",
+      "showPrompt": false,
+      "imageInput": true,
+      "videoInput": false,
+      "loopStart": 1,
+      "imageBatchSize": 1,
+      "videoBatchSize": 1,
+      "variablePrompt": "",
+      "fixedPrompt": ""
+    },
+    {
+      "id": "background_prompt",
+      "type": "prompt",
+      "x": 930,
+      "y": 430,
+      "text": "图1是本轮需要处理的主体图片，图2只作为背景环境参考。\n\n完整保留图1中的所有主体，包括主体数量、外形、颜色、材质、文字、角度、位置和构图比例。移除图1原有背景，把图2的背景环境统一迁移到图1中。\n\n根据图2匹配背景的光线方向、色温、透视、阴影、反射和景深，使图1主体自然融入新背景。\n\n禁止复制图2中的商品、人物或其他前景主体；禁止新增、删除、合并或改变图1中的主体。每轮只输出一张完整图片。"
+    },
+    {
+      "id": "gpt_image_generator",
+      "type": "generator",
+      "x": 1320,
+      "y": 120,
+      "apiProvider": "codex",
+      "model": "gpt-image-2",
+      "ratio": "square",
+      "resolution": "2k",
+      "customRatio": "",
+      "customSize": "",
+      "customRatioWidth": "",
+      "customRatioHeight": "",
+      "customWidth": "",
+      "customHeight": "",
+      "inputs": [],
+      "count": 1,
+      "quality": "high",
+      "_apiResolutionUserSet": true,
+      "generatedOutputs": []
+    },
+    {
+      "id": "batch_output",
+      "type": "output",
+      "x": 1780,
+      "y": 120,
+      "images": [],
+      "_pending": [],
+      "imageComparisons": {}
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn_subject_1_loop",
+      "from": "subject_image_1",
+      "to": "subject_loop"
+    },
+    {
+      "id": "conn_subject_2_loop",
+      "from": "subject_image_2",
+      "to": "subject_loop"
+    },
+    {
+      "id": "conn_subject_3_loop",
+      "from": "subject_image_3",
+      "to": "subject_loop"
+    },
+    {
+      "id": "conn_subject_4_loop",
+      "from": "subject_image_4",
+      "to": "subject_loop"
+    },
+    {
+      "id": "conn_subject_5_loop",
+      "from": "subject_image_5",
+      "to": "subject_loop"
+    },
+    {
+      "id": "conn_loop_generator",
+      "from": "subject_loop",
+      "to": "gpt_image_generator"
+    },
+    {
+      "id": "conn_background_generator",
+      "from": "background_image_6",
+      "to": "gpt_image_generator"
+    },
+    {
+      "id": "conn_prompt_generator",
+      "from": "background_prompt",
+      "to": "gpt_image_generator"
+    },
+    {
+      "id": "conn_generator_output",
+      "from": "gpt_image_generator",
+      "to": "batch_output"
+    }
+  ]
+}

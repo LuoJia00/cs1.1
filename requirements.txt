@@ -1,0 +1,9 @@
+# Direct dependencies, matching the existing working environment.
+fastapi==0.136.1
+uvicorn==0.47.0
+requests==2.34.2
+httpx==0.28.1
+pillow==12.2.0
+pydantic==2.13.4
+python-multipart==0.0.28
+websockets==16.0
