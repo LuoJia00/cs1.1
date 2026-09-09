@@ -104,6 +104,8 @@
         "smart.qualityLow": { zh: "低", en: "Low" },
         "smart.qualityMid": { zh: "中", en: "Medium" },
         "smart.qualityHigh": { zh: "高", en: "High" },
+        "smart.qualityXHigh": { zh: "超高", en: "Extra high" },
+        "smart.qualityMax": { zh: "最高", en: "Maximum" },
         "smart.countUnit": { zh: "张", en: "" },
         "smart.imageRatio": { zh: "图片比例", en: "Source ratio" },
         "smart.custom": { zh: "自定义", en: "Custom" },

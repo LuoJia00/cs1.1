@@ -12,7 +12,7 @@ import main
 class CodexImageTests(unittest.TestCase):
     def test_image_alias_uses_codex_chat_executor(self):
         with patch.object(main, 'codex_env_value', return_value=''):
-            for alias in ('', 'gpt-image-2', '$imagegen'):
+            for alias in ('', 'gpt-image-2', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', '$imagegen'):
                 self.assertEqual(main.gpt_image_2_skill_model_arg(alias, 'codex'),
                                  main.CODEX_DEFAULT_CHAT_MODELS[0])
                 self.assertNotEqual(main.gpt_image_2_skill_model_arg(alias, 'codex'), 'gpt-5.4')
@@ -24,6 +24,22 @@ class CodexImageTests(unittest.TestCase):
 
     def test_openai_keeps_image_model(self):
         self.assertEqual(main.gpt_image_2_skill_model_arg('gpt-image-2', 'openai'), 'gpt-image-2')
+        self.assertEqual(main.gpt_image_2_skill_model_arg('', 'openai'), main.OPENAI_DEFAULT_IMAGE_MODEL)
+
+    def test_gpt_image_2_5_quality_levels(self):
+        for model in ('gpt-image-2.5-sunburst', 'gpt-image-2.5-flare'):
+            self.assertTrue(main.is_gpt_image_2_model(model))
+            self.assertTrue(main.is_gpt_image_2_5_model(model))
+            self.assertEqual(main.normalize_openai_image_quality(model, 'xhigh'), 'xhigh')
+            self.assertEqual(main.normalize_openai_image_quality(model, 'max'), 'max')
+        self.assertEqual(main.normalize_openai_image_quality('gpt-image-2', 'xhigh'), '')
+        self.assertEqual(main.normalize_openai_image_quality('gpt-image-2', 'high'), 'high')
+
+    def test_gpt_image_2_5_parameter_schema_exposes_new_quality_levels(self):
+        fields = main.build_image_param_fields('api', {}, 'gpt-image-2.5-sunburst')
+        quality = next(field for field in fields if field['key'] == 'quality')
+        self.assertEqual([item['value'] for item in quality['options']],
+                         ['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
 
     def test_square_4k_keeps_square_composition_within_pixel_limit(self):
         size = main.gpt_image_2_skill_size_arg('4096x4096', provider='codex')

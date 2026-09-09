@@ -398,8 +398,8 @@ let remoteSyncTimer = null;
 let remoteSyncInterval = null;
 let remoteSyncBusy = false;
 let lastCanvasUpdatedAt = 0;
-let models = {gpt:'gpt-image-2', nano:'nano-banana-pro'};
-let imageModels = ['gpt-image-2', 'nano-banana-pro'];
+let models = {gpt:'gpt-image-2.5-sunburst', nano:'nano-banana-pro'};
+let imageModels = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'nano-banana-pro'];
 let chatModels = ['gpt-4o-mini'];
 let videoModels = [];
 let msChatModels = [];
@@ -827,7 +827,7 @@ function defaultApiImageResolution(model){
 }
 function normalizedImageQuality(value){
     const quality = String(value || 'auto').trim().toLowerCase();
-    return ['low','medium','high'].includes(quality) ? quality : '';
+    return ['low','medium','high','xhigh','max'].includes(quality) ? quality : '';
 }
 function resolveChatModel(value, providerId=''){
     const providerModels = providerId ? providerChatModels(providerId) : [];
@@ -1523,7 +1523,7 @@ async function loadConfig(){
         comfyBackendCount = Math.max(1, (cfg.comfy_instances || []).length || 1);
         apiProviders = Array.isArray(cfg.api_providers) && cfg.api_providers.length ? cfg.api_providers : defaultApiProviders();
         models.nano = imageModels.find(m => m.toLowerCase().includes('nano')) || 'nano-banana-pro';
-        models.gpt = imageModels.find(m => !m.toLowerCase().includes('nano')) || cfg.image_model || 'gpt-image-2';
+        models.gpt = imageModels.find(m => !m.toLowerCase().includes('nano')) || cfg.image_model || 'gpt-image-2.5-sunburst';
         try {
             const wf = await fetch('/api/workflows').then(r=>r.json());
             comfyWorkflows = wf.workflows || [];

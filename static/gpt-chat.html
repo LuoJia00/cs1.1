@@ -19,7 +19,7 @@
     <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.08.28.1788766168"></script>
     <script src="/static/vendor/js/lucide.js?v=2026.08.28.1788766168"></script>
     <script src="/static/js/theme.js?v=2026.08.28.1788766168"></script>
-    <script src="/static/js/i18n.js?v=2026.08.28.1788766168"></script>
+    <script src="/static/js/i18n.js?v=2026.08.28.1788941901"></script>
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.08.28.1788766168">
     <style>
         @import url('/static/vendor/css/fonts.css?v=2026.08.28.1788766168');
@@ -676,7 +676,7 @@
         let modelPickerHome = null;
         let resolutionPickerHome = null;
         let refs = [];
-        let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2', ms_chat_models: [] };
+        let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2.5-sunburst', ms_chat_models: [] };
 
         const SIZE_OPTIONS = {
             square: [['1024x1024','1k'], ['1536x1536','2k'], ['2048x2048','4k']],
@@ -777,11 +777,11 @@
         function chatProviders(){
             const list = (apiProviders || []).filter(p => p.enabled !== false && (p.chat_models || []).length);
             if(config.ms_chat_models?.length && !list.some(p => p.id === 'modelscope')) list.push({id:'modelscope', name:'ModelScope', chat_models:config.ms_chat_models, image_models:[]});
-            return list.length ? list : [{id:'comfly', name:'API', chat_models:[config.chat_model || 'gpt-4o-mini'], image_models:[config.image_model || 'gpt-image-2']}];
+            return list.length ? list : [{id:'comfly', name:'API', chat_models:[config.chat_model || 'gpt-4o-mini'], image_models:[config.image_model || 'gpt-image-2.5-sunburst']}];
         }
         function imageProviders(){
             const list = (apiProviders || []).filter(p => p.enabled !== false && (p.image_models || []).length);
-            return list.length ? list : [{id:'comfly', name:'API', image_models:[config.image_model || 'gpt-image-2'], chat_models:[config.chat_model || 'gpt-4o-mini']}];
+            return list.length ? list : [{id:'comfly', name:'API', image_models:[config.image_model || 'gpt-image-2.5-sunburst'], chat_models:[config.chat_model || 'gpt-4o-mini']}];
         }
         function providerById(id, kind='chat'){
             const list = kind === 'image' ? imageProviders() : chatProviders();
@@ -850,7 +850,7 @@
                 config = { ...config, ...data };
                 apiProviders = Array.isArray(config.api_providers) ? config.api_providers : [];
                 config.chat_model = (config.chat_models || []).find(m => m === 'gpt-5.5') || config.chat_model || 'gpt-5.5';
-                config.image_model = config.image_model || ((config.image_models || [])[0]) || 'gpt-image-2';
+                config.image_model = config.image_model || ((config.image_models || [])[0]) || 'gpt-image-2.5-sunburst';
                 validateSavedProviderState();
                 setMode(mode, false);
                 updateModelLabel();

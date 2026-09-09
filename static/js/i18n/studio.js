@@ -89,6 +89,8 @@
         "online.qualityLow": { zh: "低", en: "Low" },
         "online.qualityMedium": { zh: "中", en: "Medium" },
         "online.qualityHigh": { zh: "高", en: "High" },
+        "online.qualityXHigh": { zh: "超高", en: "Extra high" },
+        "online.qualityMax": { zh: "最高", en: "Maximum" },
         "online.count": { zh: "数量", en: "Count" },
         "online.modeApi": { zh: "API 生图", en: "API" },
         "online.modeModelscope": { zh: "ModelScope", en: "ModelScope" },

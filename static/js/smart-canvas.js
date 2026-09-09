@@ -723,6 +723,14 @@ function isGptImageAutoSizeModel(model){
         || compact.startsWith('gptimage2')
         || compact.endsWith('gptimage2');
 }
+function isGptImage25Model(model){
+    const normalized = String(model || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return normalized.startsWith('gpt-image-2-5-');
+}
+function supportsGptImage25Quality(){
+    const protocol = String(apiProviderById(settings.provider_id)?.protocol || '').trim().toLowerCase();
+    return protocol !== 'codex' && isGptImage25Model(settings.model);
+}
 function defaultSmartApiResolution(model){
     return isGptImageAutoSizeModel(model) ? '4k' : '1k';
 }
@@ -3416,6 +3424,10 @@ function renderInlineCustomSizeFields(prefix=''){
 function renderQualityControl(){
     const value = settings.quality || 'auto';
     const labels = {auto:tr('smart.qualityAuto'), low:tr('smart.qualityLow'), medium:tr('smart.qualityMid'), high:tr('smart.qualityHigh')};
+    if(supportsGptImage25Quality()){
+        labels.xhigh = tr('smart.qualityXHigh');
+        labels.max = tr('smart.qualityMax');
+    }
     return `<div class="smart-control quality-control">
         <button class="smart-pill" type="button"><i data-lucide="sliders-horizontal"></i><span>${escapeHtml(labels[value] || value)}</span></button>
         <div class="smart-popover compact-popover">

@@ -465,7 +465,10 @@ JIMENG_DEFAULT_VIDEO_MODELS = [
     "seedance2.0fast",
     "seedance2.0mini",
 ]
-CODEX_DEFAULT_IMAGE_MODELS = ["gpt-image-2"]
+OPENAI_DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+OPENAI_FAST_IMAGE_MODEL = "gpt-image-2.5-flare"
+CODEX_DEFAULT_IMAGE_MODELS = [OPENAI_DEFAULT_IMAGE_MODEL]
+CODEX_LEGACY_IMAGE_MODELS = {"$imagegen", "gpt-image-2"}
 CODEX_DEFAULT_CHAT_MODELS = ["gpt-5.5"]
 GEMINI_CLI_DEFAULT_IMAGE_MODELS = ["auto"]
 GEMINI_CLI_DEFAULT_CHAT_MODELS = ["auto"]
@@ -700,7 +703,7 @@ MODELSCOPE_DEFAULT_LORAS = [
 ]
 MODELSCOPE_DEFAULTS_VERSION = 3
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
-IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gpt-image-2")
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", OPENAI_DEFAULT_IMAGE_MODEL)
 SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "You are a helpful assistant.")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "30"))
 AI_REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "1800"))
@@ -772,7 +775,7 @@ def reload_env_globals():
     MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
     AI_API_KEY = os.getenv("COMFLY_API_KEY", "")
     AI_BASE_URL = os.getenv("COMFLY_BASE_URL", "https://ai.comfly.chat").rstrip("/")
-    IMAGE_MODELS = model_list("IMAGE_MODELS", os.getenv("IMAGE_MODEL", IMAGE_MODEL), ["nano-banana-pro"])
+    IMAGE_MODELS = model_list("IMAGE_MODELS", os.getenv("IMAGE_MODEL", IMAGE_MODEL), [OPENAI_FAST_IMAGE_MODEL, "nano-banana-pro"])
     CHAT_MODELS = model_list("CHAT_MODELS", os.getenv("CHAT_MODEL", CHAT_MODEL), ["gpt-4o-mini", "gemini-3.1-flash-image-preview-2k"])
     VIDEO_MODELS = model_list("VIDEO_MODELS", "veo3-fast", [
         "veo2", "veo2-fast", "veo2-pro",
@@ -793,7 +796,7 @@ def reload_env_globals():
     MODELSCOPE_CHAT_MODELS = list(dict.fromkeys([m for m in [*MODELSCOPE_DEFAULT_CHAT_MODELS, *_configured] if m]))
 
 CHAT_MODELS = model_list("CHAT_MODELS", CHAT_MODEL, ["gpt-4o-mini", "gemini-3.1-flash-image-preview-2k"])
-IMAGE_MODELS = model_list("IMAGE_MODELS", IMAGE_MODEL, ["nano-banana-pro"])
+IMAGE_MODELS = model_list("IMAGE_MODELS", IMAGE_MODEL, [OPENAI_FAST_IMAGE_MODEL, "nano-banana-pro"])
 VIDEO_MODELS = model_list("VIDEO_MODELS", "veo3-fast", [
     # —— Veo 系列 ——
     "veo2", "veo2-fast", "veo2-pro",
@@ -1039,7 +1042,10 @@ def merge_default_api_providers(providers, inject_missing=True):
         default_chat_models = CODEX_DEFAULT_CHAT_MODELS if current_protocol == "codex" else GEMINI_CLI_DEFAULT_CHAT_MODELS
         image_models = current.get("image_models") or []
         if current_protocol == "codex":
-            image_models = [item for item in image_models if str(item or "").strip().lower() != "$imagegen"]
+            image_models = [
+                item for item in image_models
+                if str(item or "").strip().lower() not in CODEX_LEGACY_IMAGE_MODELS
+            ]
         current["image_models"] = model_list_from_values([*image_models, *default_image_models])
         current["chat_models"] = model_list_from_values([*(current.get("chat_models") or []), *default_chat_models])
         current["video_models"] = []
@@ -5270,7 +5276,7 @@ def gpt_image_2_skill_model_arg(model="", provider="openai"):
             return str(codex_env_value("CODEX_IMAGE_EXEC_MODEL") or "").strip() or CODEX_DEFAULT_CHAT_MODELS[0]
         return value
     if not value or low.startswith("$imagegen"):
-        return "gpt-image-2"
+        return OPENAI_DEFAULT_IMAGE_MODEL
     return value
 
 def gpt_image_2_skill_size_arg(size="", model="", prompt="", provider="openai"):
@@ -9841,6 +9847,20 @@ def is_gpt_image_2_model(model):
         or compact.endswith("gptimage2")
     )
 
+def is_gpt_image_2_5_model(model):
+    raw = str(model or "").strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    return normalized.startswith("gpt-image-2-5-")
+
+def normalize_openai_image_quality(model, quality):
+    value = str(quality or "").strip().lower()
+    # `auto` is the API default, so omitting it preserves compatibility with
+    # older OpenAI-compatible providers that do not accept the literal value.
+    allowed = {"low", "medium", "high"}
+    if is_gpt_image_2_5_model(model):
+        allowed.update({"xhigh", "max"})
+    return value if value in allowed else ""
+
 def normalize_gpt_image_2_size(size):
     width, height = parse_size_pair(size)
     if not width or not height:
@@ -11398,9 +11418,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
     is_apimart = is_apimart_provider(provider)
     # 不对 GPT 尺寸做任何缩小/拦截：用户选什么尺寸就原样发给上游；
     # 若超过 GPT 的最大像素限制被上游拒绝，再由 friendly_image_error_detail 给出友好的像素上限提示。
-    quality = str(quality or "").strip().lower()
-    if quality not in {"low", "medium", "high"}:
-        quality = ""
+    quality = normalize_openai_image_quality(model, quality)
     base_url = (provider.get("base_url") or AI_BASE_URL).rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail=f"{provider.get('name') or provider['id']} 未配置 Base URL")
@@ -14815,14 +14833,20 @@ def build_image_param_fields(engine: str, provider: dict, model: str):
 
     fields = [size_field]
     if engine in ("api", "volcengine"):
+        quality_options = [
+            {"value": "auto", "label": "自动"},
+            {"value": "low", "label": "低"},
+            {"value": "medium", "label": "中"},
+            {"value": "high", "label": "高"},
+        ]
+        if engine == "api" and not is_codex_provider(provider) and is_gpt_image_2_5_model(model):
+            quality_options.extend([
+                {"value": "xhigh", "label": "超高"},
+                {"value": "max", "label": "最高"},
+            ])
         fields.append({
             "key": "quality", "type": "select", "label": "质量", "control": "chips",
-            "options": [
-                {"value": "auto", "label": "自动"},
-                {"value": "low", "label": "低"},
-                {"value": "medium", "label": "中"},
-                {"value": "high", "label": "高"},
-            ],
+            "options": quality_options,
             "default": "auto",
         })
     fields.append(count_field)

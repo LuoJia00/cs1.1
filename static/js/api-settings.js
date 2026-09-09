@@ -88,7 +88,8 @@ const JIMENG_DEFAULT_IMAGE_MODELS = ['5.0Pro', '5.0', '4.7', '4.6', '4.5', '4.1'
 const JIMENG_DEFAULT_VIDEO_MODELS = ['seedance2.0fast_vip', 'seedance2.0_vip', 'seedance2.0', 'seedance2.0fast', 'seedance2.0mini'];
 const JIMENG_LEGACY_IMAGE_MODELS = new Set(['jimeng-image-2k', 'jimeng-image-4k']);
 const JIMENG_LEGACY_VIDEO_MODELS = new Set(['jimeng-video-720p', 'jimeng-video-1080p']);
-const CODEX_DEFAULT_IMAGE_MODELS = ['gpt-image-2'];
+const CODEX_DEFAULT_IMAGE_MODELS = ['gpt-image-2.5-sunburst'];
+const CODEX_LEGACY_IMAGE_MODELS = new Set(['$imagegen', 'gpt-image-2']);
 const CODEX_DEFAULT_CHAT_MODELS = ['gpt-5.5'];
 const GEMINI_CLI_DEFAULT_IMAGE_MODELS = ['auto'];
 const GEMINI_CLI_DEFAULT_CHAT_MODELS = ['auto'];
@@ -138,7 +139,7 @@ function applyCliProtocolDefaults(item, protocol){
         item.video_models = unique([...(item.video_models || []).filter(model => !JIMENG_LEGACY_VIDEO_MODELS.has(String(model || '').trim())), ...JIMENG_DEFAULT_VIDEO_MODELS]);
         item.chat_models = unique(item.chat_models || []);
     } else if(value === 'codex'){
-        item.image_models = unique([...(item.image_models || []).filter(model => String(model || '').trim().toLowerCase() !== '$imagegen'), ...CODEX_DEFAULT_IMAGE_MODELS]);
+        item.image_models = unique([...(item.image_models || []).filter(model => !CODEX_LEGACY_IMAGE_MODELS.has(String(model || '').trim().toLowerCase())), ...CODEX_DEFAULT_IMAGE_MODELS]);
         item.chat_models = unique([...(item.chat_models || []), ...CODEX_DEFAULT_CHAT_MODELS]);
         item.video_models = [];
     } else if(value === 'gemini-cli'){
