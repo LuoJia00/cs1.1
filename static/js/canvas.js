@@ -15586,6 +15586,10 @@ function linkDeleteButton(connection, a, b){
     btn.style.left = `${(a.x + b.x) / 2}px`;
     btn.style.top = `${(a.y + b.y) / 2}px`;
     btn.textContent = '×';
+    btn.onmousedown = e => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
     btn.onclick = e => deleteConnection(connection.id, e);
     return btn;
 }
@@ -15794,7 +15798,7 @@ canvasArrangeBtn?.addEventListener('click', e => {
     arrangeSelectedCanvasNodes();
 });
 function isZoomPreviewIgnoredTarget(target){
-    return !!target?.closest?.('#createMenu, #linkCreateMenu, #nodeInputMenu, #nodeOutputMenu, #imageNodeMenu, .minimap, #canvasAssetPanel, #assetManagerModal, #workflowTransferModal, #logModal, #promptTemplateModal, #imageEditModal, #outputLightbox');
+    return !!target?.closest?.('#createMenu, #linkCreateMenu, #nodeInputMenu, #nodeOutputMenu, #imageNodeMenu, .link-delete, .minimap, #canvasAssetPanel, #assetManagerModal, #workflowTransferModal, #logModal, #promptTemplateModal, #imageEditModal, #outputLightbox');
 }
 board.addEventListener('mousedown', e => {
     if(!zoomPreviewState || e.button !== 0) return;
