@@ -25,6 +25,7 @@
 /API/*
 !/API/.env.example
 !/CLI/
+!/python/
 !/static/
 !/tools/
 !/workflows/
