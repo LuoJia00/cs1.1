@@ -459,6 +459,7 @@ let managerSelectedPromptIds = new Set();
 let activeCanvasWorkflowCategoryId = '';
 const activeCanvasTaskPolls = new Set();
 let hoveredConnectionId = '';
+let connectionHoverClearTimer = null;
 let lastMouseBoard = {x: 0, y: 0};
 let undoStack = [];
 const UNDO_MAX = 30;
@@ -15598,10 +15599,25 @@ function linkHitEl(x1,y1,x2,y2,id){
     p.dataset.connectionId = id;
     return p;
 }
-function setHoveredConnection(id){
-    if(hoveredConnectionId === id) return;
+function setHoveredConnection(id, immediate=false){
+    const nextId = id || '';
+    if(!nextId && hoveredConnectionId && !immediate){
+        if(!connectionHoverClearTimer){
+            const pendingId = hoveredConnectionId;
+            connectionHoverClearTimer = setTimeout(() => {
+                connectionHoverClearTimer = null;
+                if(hoveredConnectionId === pendingId) setHoveredConnection('', true);
+            }, 250);
+        }
+        return;
+    }
+    if(connectionHoverClearTimer){
+        clearTimeout(connectionHoverClearTimer);
+        connectionHoverClearTimer = null;
+    }
+    if(hoveredConnectionId === nextId) return;
     const oldId = hoveredConnectionId;
-    hoveredConnectionId = id || '';
+    hoveredConnectionId = nextId;
     if(oldId){
         const oldBtn = linkControlsEl.querySelector(`[data-connection-id="${CSS.escape(oldId)}"]`);
         if(oldBtn) oldBtn.classList.remove('hover');

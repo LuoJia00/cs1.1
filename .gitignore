@@ -32,7 +32,8 @@
 
 # Private configuration, generated content and development caches.
 **/__pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 .env
 .env.*
 !.env.example
@@ -46,6 +47,8 @@
 **/credentials.json
 **/*.pem
 **/*.key
+!/python/Lib/site-packages/certifi/cacert.pem
+!/python/Lib/site-packages/pip/_vendor/certifi/cacert.pem
 /static/runninghub/api_providers.json
 /static/runninghub/models_registry.json
 /static/runninghub/thumbnails/

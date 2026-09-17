@@ -5,10 +5,10 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-PRIVATE_PREFIXES = ("data/", "assets/", "output/", "logs/", "python/", ".venv/", ".local-backups/", ".private-transfer/")
+PRIVATE_PREFIXES = ("data/", "assets/", "output/", "logs/", ".venv/", ".local-backups/", ".private-transfer/")
 PRIVATE_FILES = {"history.json", "global_config.json", "static/runninghub/api_providers.json", "static/runninghub/models_registry.json"}
 SECRET_KEY = re.compile(r"api.?key|token|password|secret|authorization", re.I)
-TOKEN = re.compile(rb"(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)")
+TOKEN = re.compile(rb"(?:(?<![A-Za-z0-9_-])sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)")
 
 
 def known_secrets():

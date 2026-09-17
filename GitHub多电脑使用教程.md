@@ -61,7 +61,7 @@ GitHub 网页只用于查看代码；日常更新用 Desktop。原 LICENSE 要�
 
 ## 七、哪些文件不会上传
 
-`API/.env`、`data/`、`assets/`、`output/`、`history.json`、`global_config.json`、`logs/`、`python/`、`.venv/`、`.local-backups/`、`.private-transfer/` 和运行时的 RunningHub 个人配置等均已排除。
+`API/.env`、`data/`、`assets/`、`output/`、`history.json`、`global_config.json`、`logs/`、`.venv/`、`.local-backups/`、`.private-transfer/` 和运行时的 RunningHub 个人配置等均已排除；`python/` 便携运行库会跟随仓库分发。
 
 程序使用的内置界面图片属于代码资源，会随项目保留；你的生成图片、素材和聊天附件不会上传。根目录新文件默认不上传，需要修改 `.gitignore` 白名单；不要为了上传而删除整个忽略文件。
 
