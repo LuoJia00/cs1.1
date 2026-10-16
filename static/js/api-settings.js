@@ -3073,12 +3073,7 @@ async function testConnection(){
             // "验证地址" only checks reachability. Protocol and image-interface
             // selection are intentionally left untouched for this action.
             // 存入 picker 状态并启用「选择模型」按钮，但不自动弹出
-            lastFetchedAll = data.all || [];
-            lastFetchedSuggestion = {
-                image: new Set(data.image_models || []),
-                chat: new Set(data.chat_models || []),
-                video: new Set(data.video_models || []),
-            };
+            setFetchedModelState(data);
             const openBtn = document.getElementById('openPickerBtn');
             if(openBtn){ openBtn.disabled = false; openBtn.style.opacity = '1'; }
             const isRunningHubNow = runninghubContext || detectedProtocol === 'runninghub';
@@ -3108,6 +3103,8 @@ async function testConnection(){
 let lastFetchedAll = [];          // 全部模型 id 列表
 let lastFetchedSuggestion = null; // 后端自动分类建议
 let lastFetchedModelNames = {};   // {模型 id: 展示名}
+let lastFetchedModelSources = {};
+let lastFetchedSourceNote = '';
 
 function setFetchedModelState(data){
     lastFetchedAll = Array.isArray(data?.all) ? data.all : [];
@@ -3117,6 +3114,8 @@ function setFetchedModelState(data){
         video: new Set(data?.video_models || []),
     };
     lastFetchedModelNames = (data?.model_names && typeof data.model_names === 'object') ? {...data.model_names} : {};
+    lastFetchedModelSources = (data?.model_sources && typeof data.model_sources === 'object') ? {...data.model_sources} : {};
+    lastFetchedSourceNote = String(data?.source_note || '');
 }
 const RH_KNOWN_MODEL_LABELS = {
     'gpt-image-2.0/text-to-image-channel-low-price':'全能图片G2 · 文生图 · 低价渠道版',
@@ -3298,6 +3297,8 @@ function renderModelPicker(){
     });
     pickerVisibleIds = list;
     document.getElementById('pickerCount').textContent = `共 ${totals.all} 个模型 · 当前显示 ${list.length} 个`;
+    const sourceNote = document.getElementById('pickerSourceNote');
+    if(sourceNote){ sourceNote.textContent = lastFetchedSourceNote; sourceNote.hidden = !lastFetchedSourceNote; }
     document.querySelectorAll('.picker-cat-tab').forEach(tab => {
         const cat = tab.dataset.cat;
         tab.querySelector('.cat-count').textContent = `${selecteds[cat]}/${totals[cat]}`;
@@ -3307,6 +3308,7 @@ function renderModelPicker(){
         const checked = pickerState.selected[id];
         const label = modelDisplayName(id, item);
         const badge = providerModelBadge(id, label);
+        const source = lastFetchedModelSources[id] || (lastFetchedSourceNote ? '已配置' : '');
         return `
             <div class="picker-row ${checked?'has-sel':''}" onclick="togglePickerRowByIndex(${index})">
                 <div class="picker-checkbox ${checked?'checked':''}">
@@ -3316,6 +3318,7 @@ function renderModelPicker(){
                 <div class="picker-model-name" title="${escapeAttr(id)}">
                     <div class="picker-model-label">${escapeHtml(label || id)}</div>
                     ${label && label !== id ? `<div class="picker-model-id">${escapeHtml(id)}</div>` : ''}
+                    ${source ? `<div class="picker-model-id">${escapeHtml(source)}</div>` : ''}
                 </div>
             </div>
         `;

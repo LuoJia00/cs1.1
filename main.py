@@ -5501,6 +5501,30 @@ def codex_postprocess_image_to_requested_size(path="", requested_size="", provid
         print(f"{label} 图片尺寸后处理失败：{exc}")
         return ""
 
+def codex_image_request_body(prompt, size, model, ref_paths=None):
+    image_model = str(model or "").strip()
+    if not image_model.lower().startswith("gpt-image"):
+        image_model = OPENAI_DEFAULT_IMAGE_MODEL
+    content = [{"type": "input_text", "text": gpt_image_2_skill_prompt_arg(prompt, size, "codex")}]
+    for path in ref_paths or []:
+        mime = mimetypes.guess_type(path)[0] or "image/png"
+        with open(path, "rb") as image_file:
+            encoded = base64.b64encode(image_file.read()).decode("ascii")
+        content.append({"type": "input_image", "image_url": f"data:{mime};base64,{encoded}"})
+    tool_size = gpt_image_2_skill_size_arg(size, model, prompt, "codex") if size else "auto"
+    tool_size = {"1K": "1024x1024", "2K": "2048x2048", "4K": "3840x2160"}.get(tool_size, tool_size)
+    return {
+        "model": gpt_image_2_skill_model_arg(model, "codex"),
+        "instructions": "Generate or edit the requested image with the image_generation tool.",
+        "input": [{"role": "user", "content": content}],
+        "tools": [{"type": "image_generation", "model": image_model, "size": tool_size,
+                   "quality": "high", "output_format": "png", "action": "edit" if ref_paths else "generate"}],
+        "tool_choice": {"type": "image_generation"},
+        "store": False,
+        "stream": True,
+    }
+
+
 async def generate_codex_provider_image_via_gpt_image_2_skill(prompt, size, model, ref_paths=None):
     exe = gpt_image_2_skill_executable()
     if not exe:
@@ -5522,27 +5546,26 @@ async def generate_codex_provider_image_via_gpt_image_2_skill(prompt, size, mode
             "--json",
         ]
         args.extend(attempt_provider_args)
-        args.extend([
-            "images",
-            mode,
-            "--prompt",
-            gpt_image_2_skill_prompt_arg(prompt, size, attempt_provider),
-            "--out",
-            out_path,
-            "--model",
-            gpt_image_2_skill_model_arg(model, attempt_provider),
-            "--format",
-            "png",
-            "--size",
-            gpt_image_2_skill_size_arg(size, model, prompt, attempt_provider),
-            "--quality",
-            "high",
-        ])
-        for path in ref_paths:
-            args.extend(["--ref-image", path])
-        if ref_paths and attempt_provider == "openai":
-            args.extend(["--input-fidelity", "high"])
+        body_path = ""
         try:
+            if attempt_provider == "codex":
+                body = codex_image_request_body(prompt, size, model, ref_paths)
+                fd, body_path = tempfile.mkstemp(prefix="codex_image_request_", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as body_file:
+                    json.dump(body, body_file, ensure_ascii=False)
+                args.extend(["request", "create", "--body-file", body_path,
+                             "--out-image", out_path, "--expect-image"])
+            else:
+                args.extend([
+                    "images", mode, "--prompt", gpt_image_2_skill_prompt_arg(prompt, size, attempt_provider),
+                    "--out", out_path, "--model", gpt_image_2_skill_model_arg(model, attempt_provider),
+                    "--format", "png", "--size", gpt_image_2_skill_size_arg(size, model, prompt, attempt_provider),
+                    "--quality", "high",
+                ])
+                for path in ref_paths:
+                    args.extend(["--ref-image", path])
+                if ref_paths:
+                    args.extend(["--input-fidelity", "high"])
             returncode, stdout, stderr = await run_captured_subprocess(
                 args,
                 cwd=BASE_DIR,
@@ -5552,6 +5575,9 @@ async def generate_codex_provider_image_via_gpt_image_2_skill(prompt, size, mode
             raise HTTPException(status_code=504, detail="GPT Image 2 Skill 执行超时。可设置 CODEX_CLI_TIMEOUT 增大等待时间。") from exc
         except FileNotFoundError:
             return None
+        finally:
+            if body_path and os.path.isfile(body_path):
+                os.remove(body_path)
         out_text, err_text = codex_decode_output(stdout, stderr)
         if returncode != 0:
             message = gpt_image_2_skill_failure_message(out_text, err_text, returncode)
@@ -5582,6 +5608,7 @@ async def generate_codex_provider_image_via_gpt_image_2_skill(prompt, size, mode
             "provider": "codex",
             "tool": "gpt-image-2-skill",
             "tool_provider": attempt_provider,
+            "requested_image_model": body["tools"][0]["model"] if attempt_provider == "codex" else gpt_image_2_skill_model_arg(model, attempt_provider),
             "raw": parsed or {"stdout": out_text, "stderr": err_text},
         }
     raise HTTPException(status_code=502, detail=f"GPT Image 2 Skill 调用失败：{last_message[:1200]}")
@@ -5651,20 +5678,53 @@ async def codex_reference_paths(reference_images=None):
         raise
 
 def codex_models_payload(raw=None):
-    all_models = [*CODEX_DEFAULT_IMAGE_MODELS, *CODEX_DEFAULT_CHAT_MODELS]
+    entries = raw.get("models") if isinstance(raw, dict) else None
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=502, detail="Codex 返回的模型目录格式不正确，请更新 Codex CLI 后重试。")
+    visible = [item for item in entries if isinstance(item, dict) and item.get("visibility") not in {"hide", "hidden"}]
+    chat_models = model_list_from_values([item.get("slug") or item.get("id") or "" for item in visible])
+    if not chat_models:
+        raise HTTPException(status_code=502, detail="Codex 上游没有返回可选模型，请检查登录状态与账号权限。")
+    all_models = [*CODEX_DEFAULT_IMAGE_MODELS, *chat_models]
     return {
         "ok": True,
         "protocol": "codex",
         "status": 200,
-        "message": "OpenAI Codex CLI 可用，模型列表来自本机 CLI 默认配置。",
+        "message": f"已刷新 Codex 模型目录，共 {len(chat_models)} 个 LLM 模型。",
+        "source_note": "LLM 来自 Codex 刷新目录；生图项为项目配置的型号，未从 Codex 目录拉取；列表同时保留已配置的模型。",
+        "model_sources": {**{model: "Codex 上游" for model in chat_models},
+                          **{model: "生图预设" for model in CODEX_DEFAULT_IMAGE_MODELS}},
+        "model_names": {str(item.get("slug") or item.get("id")): str(item.get("display_name") or item.get("slug") or item.get("id")) for item in visible if item.get("slug") or item.get("id")},
         "model_count": len(all_models),
         "total": len(all_models),
         "image_models": CODEX_DEFAULT_IMAGE_MODELS,
-        "chat_models": CODEX_DEFAULT_CHAT_MODELS,
+        "chat_models": chat_models,
         "video_models": [],
         "all": all_models,
-        "raw": raw or {},
+        "raw": {"command": "codex debug models", "catalog_model_count": len(entries)},
     }
+
+async def fetch_codex_models():
+    exe = codex_cli_executable()
+    if not exe:
+        raise HTTPException(status_code=400, detail="未找到 OpenAI Codex CLI，请先安装并登录。")
+    try:
+        returncode, stdout, stderr = await run_captured_subprocess(
+            [exe, "debug", "models"], cwd=BASE_DIR, timeout=45,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="刷新 Codex 上游模型超时，请检查网络后重试。") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=502, detail=f"无法运行 Codex 模型刷新命令：{exc}") from exc
+    out_text, err_text = codex_decode_output(stdout, stderr)
+    refresh_failed = re.search(r"(?:failed|unable|error).*?(?:refresh|models)|(?:refresh|models).*?(?:failed|error)", err_text, re.I)
+    if returncode != 0 or refresh_failed:
+        raise HTTPException(status_code=502, detail=f"Codex 上游模型刷新失败，请检查登录与网络；旧版 CLI 请先更新：{(err_text or out_text)[:1200]}")
+    try:
+        raw = json.loads(out_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Codex 未返回有效的模型 JSON，请更新 Codex CLI 后重试。") from exc
+    return codex_models_payload(raw)
 
 async def generate_codex_provider_image(prompt, size, model, reference_images=None, provider=None):
     ref_paths, temp_paths = await codex_reference_paths(reference_images)
@@ -13802,14 +13862,7 @@ async def test_provider_connection(payload: TestConnectionPayload):
     """测试请求地址是否可用：调上游 /v1/models。验证通过时同时把模型清单按类别返回，避免再调一次拉取接口。"""
     protocol = protocol_from_payload(payload)
     if protocol == "codex":
-        status = await codex_status()
-        payload_models = codex_models_payload(raw={"status": status})
-        payload_models.update({
-            "ok": bool(status.get("installed")),
-            "status": 200 if status.get("installed") else 0,
-            "message": status.get("message") or ("OpenAI Codex CLI 可用" if status.get("installed") else "未找到 OpenAI Codex CLI"),
-        })
-        return payload_models
+        return await fetch_codex_models()
     if protocol == "gemini-cli":
         status = await gemini_cli_status()
         payload_models = gemini_cli_models_payload(raw={"status": status})
@@ -14082,10 +14135,7 @@ async def fetch_models_from_upstream(base_url: str, api_key: str, protocol: str 
     """从上游模型列表端点拉取模型，并按名称做轻量分类。"""
     protocol = protocol if protocol in SUPPORTED_PROVIDER_PROTOCOLS else "openai"
     if protocol == "codex":
-        status = await codex_status()
-        payload = codex_models_payload(raw={"status": status})
-        payload["message"] = status.get("message") or payload["message"]
-        return payload
+        return await fetch_codex_models()
     if protocol == "gemini-cli":
         status = await gemini_cli_status()
         payload = gemini_cli_models_payload(raw={"status": status})
