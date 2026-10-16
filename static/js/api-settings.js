@@ -90,7 +90,7 @@ const JIMENG_LEGACY_IMAGE_MODELS = new Set(['jimeng-image-2k', 'jimeng-image-4k'
 const JIMENG_LEGACY_VIDEO_MODELS = new Set(['jimeng-video-720p', 'jimeng-video-1080p']);
 const CODEX_DEFAULT_IMAGE_MODELS = ['gpt-image-2.5-sunburst'];
 const CODEX_LEGACY_IMAGE_MODELS = new Set(['$imagegen', 'gpt-image-2']);
-const CODEX_DEFAULT_CHAT_MODELS = ['gpt-5.5'];
+const CODEX_DEFAULT_CHAT_MODELS = ['gpt-6.1-sol'];
 const GEMINI_CLI_DEFAULT_IMAGE_MODELS = ['auto'];
 const GEMINI_CLI_DEFAULT_CHAT_MODELS = ['auto'];
 const CLI_PROTOCOLS = new Set(['jimeng', 'codex', 'gemini-cli']);
@@ -140,7 +140,7 @@ function applyCliProtocolDefaults(item, protocol){
         item.chat_models = unique(item.chat_models || []);
     } else if(value === 'codex'){
         item.image_models = unique([...(item.image_models || []).filter(model => !CODEX_LEGACY_IMAGE_MODELS.has(String(model || '').trim().toLowerCase())), ...CODEX_DEFAULT_IMAGE_MODELS]);
-        item.chat_models = unique([...(item.chat_models || []), ...CODEX_DEFAULT_CHAT_MODELS]);
+        item.chat_models = unique([...(item.chat_models || []).map(model => String(model || '').trim().toLowerCase() === 'gpt-5.5' ? CODEX_DEFAULT_CHAT_MODELS[0] : model), ...CODEX_DEFAULT_CHAT_MODELS]);
         item.video_models = [];
     } else if(value === 'gemini-cli'){
         item.image_models = unique([...(item.image_models || []), ...GEMINI_CLI_DEFAULT_IMAGE_MODELS]);

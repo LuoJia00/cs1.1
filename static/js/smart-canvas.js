@@ -6563,8 +6563,14 @@ function syncSmartGroupMemberElements(group){
         updateNodeElementDuringResize(member);
     });
 }
+function isHeifMediaItem(img){
+    const name = String(img?.name || '').toLowerCase();
+    const url = smartOriginalMediaUrl(img).toLowerCase();
+    return /\.(heic|heif)$/.test(name) || /\.(heic|heif)(\?|#|$)/.test(url);
+}
 function isVideoMediaItem(img){
     if(!img) return false;
+    if(isHeifMediaItem(img)) return false;
     if(img.kind === 'video') return true;
     const url = smartOriginalMediaUrl(img).toLowerCase();
     return /\.(mp4|webm|mov|m4v|avi|mkv)(\?|$)/.test(url);
@@ -6574,6 +6580,7 @@ function isInlineVideoActive(img){
 }
 function isAudioMediaItem(img){
     if(!img) return false;
+    if(isHeifMediaItem(img)) return false;
     if(img.kind === 'audio') return true;
     const url = smartOriginalMediaUrl(img).toLowerCase();
     return /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(url);
@@ -6591,12 +6598,14 @@ function isFileMediaItem(img){
 function mediaKindForFile(file){
     const type = String(file?.type || '').toLowerCase();
     const name = String(file?.name || '').toLowerCase();
+    if(/\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)(\?|$)/.test(name)) return 'image';
     if(type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)(\?|$)/.test(name)) return 'video';
     if(type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name)) return 'audio';
     if(type.startsWith('text/') || /\.(txt|json|csv|srt|vtt|md)(\?|$)/.test(name)) return 'text';
     return 'image';
 }
 function mediaKindForItem(img){
+    if(isHeifMediaItem(img)) return 'image';
     if(isFileMediaItem(img)) return 'file';
     if(isTextMediaItem(img)) return 'text';
     if(isAudioMediaItem(img)) return 'audio';
@@ -6893,6 +6902,10 @@ function proxiedMediaUrl(itemOrUrl, name=''){
 }
 function displayMediaUrl(itemOrUrl, name=''){
     const url = smartOriginalMediaUrl(itemOrUrl);
+    const itemName = name || (typeof itemOrUrl === 'object' ? itemOrUrl?.name || '' : '');
+    const local = String(url || '').startsWith('/assets/') || String(url || '').startsWith('/output/');
+    const heif = /\.(heic|heif)(\?|#|$)/i.test(String(url || '')) || (/\.(heic|heif)$/i.test(itemName) && !/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(String(url || '')));
+    if(local && heif) return `/api/image-jpeg?url=${encodeURIComponent(url)}`;
     if(/^https?:\/\//i.test(String(url || ''))) return proxiedMediaUrl(itemOrUrl, name);
     return url;
 }
@@ -9608,7 +9621,7 @@ function handlePortDrop(drag, e){
 function pickMediaForSmartNode(nodeId){
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,video/*,audio/*';
+    input.accept = 'image/*,.heic,.heif,video/*,audio/*';
     input.multiple = true;
     input.onchange = () => {
         if(input.files?.length) handleFiles(input.files, nodeId);
@@ -13345,7 +13358,7 @@ function isSupportedUploadFile(file){
     const type = String(file?.type || '').toLowerCase();
     const name = String(file?.name || '').toLowerCase();
     return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')
-        || /\.(png|jpe?g|webp|gif|mp4|webm|mov|m4v|mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name);
+        || /\.(png|jpe?g|webp|gif|heic|heif|mp4|webm|mov|m4v|mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name);
 }
 function dataTransferItemEntry(item){
     try { return item?.webkitGetAsEntry?.() || null; } catch { return null; }
@@ -13383,7 +13396,7 @@ function uploadTitleForItems(items, fallback='Upload'){
     if(kinds.has('audio')) return 'Audio';
     return list.length > 1 ? 'Group' : 'Image';
 }
-const SMART_IMAGE_DROP_EXT_RE = /\.(png|jpe?g|webp|gif)$/i;
+const SMART_IMAGE_DROP_EXT_RE = /\.(png|jpe?g|webp|gif|heic|heif)$/i;
 const SMART_IMAGE_DROP_TEXT_TYPES = [
     'text/uri-list',
     'text/plain',

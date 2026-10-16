@@ -10,7 +10,7 @@ if not exist "%PYEXE%" (
 )
 
 if not defined PYEXE goto prepare_python
-"%PYEXE%" -c "import fastapi, uvicorn, requests, httpx, PIL, pydantic, multipart, websockets" >nul 2>nul
+"%PYEXE%" -c "import fastapi, uvicorn, requests, httpx, PIL, pillow_heif, pydantic, multipart, websockets" >nul 2>nul
 if errorlevel 1 goto prepare_python
 goto python_ready
 

@@ -31,6 +31,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from threading import Lock, Thread
 import httpx
 from PIL import Image, ImageOps
+from pillow_heif import register_heif_opener
 from io import BytesIO
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Header, Request
 from fastapi.exceptions import RequestValidationError
@@ -38,6 +39,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+
+register_heif_opener()
 
 
 def patch_windows_proactor_accept_reset():
@@ -469,7 +472,7 @@ OPENAI_DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 OPENAI_FAST_IMAGE_MODEL = "gpt-image-2.5-flare"
 CODEX_DEFAULT_IMAGE_MODELS = [OPENAI_DEFAULT_IMAGE_MODEL]
 CODEX_LEGACY_IMAGE_MODELS = {"$imagegen", "gpt-image-2"}
-CODEX_DEFAULT_CHAT_MODELS = ["gpt-5.5"]
+CODEX_DEFAULT_CHAT_MODELS = ["gpt-6.1-sol"]
 GEMINI_CLI_DEFAULT_IMAGE_MODELS = ["auto"]
 GEMINI_CLI_DEFAULT_CHAT_MODELS = ["auto"]
 try:
@@ -1041,13 +1044,15 @@ def merge_default_api_providers(providers, inject_missing=True):
         default_image_models = CODEX_DEFAULT_IMAGE_MODELS if current_protocol == "codex" else GEMINI_CLI_DEFAULT_IMAGE_MODELS
         default_chat_models = CODEX_DEFAULT_CHAT_MODELS if current_protocol == "codex" else GEMINI_CLI_DEFAULT_CHAT_MODELS
         image_models = current.get("image_models") or []
+        chat_models = current.get("chat_models") or []
         if current_protocol == "codex":
             image_models = [
                 item for item in image_models
                 if str(item or "").strip().lower() not in CODEX_LEGACY_IMAGE_MODELS
             ]
+            chat_models = [codex_model_for_exec(item) for item in chat_models]
         current["image_models"] = model_list_from_values([*image_models, *default_image_models])
-        current["chat_models"] = model_list_from_values([*(current.get("chat_models") or []), *default_chat_models])
+        current["chat_models"] = model_list_from_values([*chat_models, *default_chat_models])
         current["video_models"] = []
     return merged
 
@@ -5042,6 +5047,8 @@ def codex_model_for_exec(model="", fallback=""):
     low = value.lower()
     if not value or low.startswith("$imagegen") or low.startswith("gpt-image"):
         return ""
+    if low == "gpt-5.5":
+        return CODEX_DEFAULT_CHAT_MODELS[0]
     return value
 
 def codex_decode_output(stdout, stderr):
@@ -5270,11 +5277,10 @@ def gpt_image_2_skill_model_arg(model="", provider="openai"):
     low = value.lower()
     provider = str(provider or "").strip().lower()
     if provider == "codex":
-        if not value or low.startswith("$imagegen") or low.startswith("gpt-image"):
-            # This is the Responses executor, not the image model. Reuse the
-            # app's Codex chat default; gpt-5.4 is rejected by ChatGPT accounts.
-            return str(codex_env_value("CODEX_IMAGE_EXEC_MODEL") or "").strip() or CODEX_DEFAULT_CHAT_MODELS[0]
-        return value
+        # Codex needs a Responses executor, including for image requests.
+        return (codex_model_for_exec(value)
+                or codex_model_for_exec(codex_env_value("CODEX_IMAGE_EXEC_MODEL"))
+                or CODEX_DEFAULT_CHAT_MODELS[0])
     if not value or low.startswith("$imagegen"):
         return OPENAI_DEFAULT_IMAGE_MODEL
     return value
@@ -7156,7 +7162,7 @@ def image_has_alpha(img: Image.Image) -> bool:
         return "transparency" in img.info
     return False
 
-STORAGE_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"}
+STORAGE_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif", ".heic", ".heif"}
 
 def storage_file_item(kind, root, path):
     rel = os.path.relpath(path, root).replace("\\", "/")
@@ -8331,6 +8337,10 @@ def content_type_for_path(path):
         return "image/jpeg"
     if ext == ".webp":
         return "image/webp"
+    if ext == ".heic":
+        return "image/heic"
+    if ext == ".heif":
+        return "image/heif"
     if ext == ".txt":
         return "text/plain; charset=utf-8"
     if ext == ".json":
@@ -12074,10 +12084,35 @@ async def upload_image(files: List[UploadFile] = File(...)):
 
     return {"files": uploaded_files}
 
+HEIF_IMAGE_EXTS = {".heic", ".heif"}
+HEIF_IMAGE_MIMES = {"image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"}
+
+def normalize_heif_upload(content: bytes, filename: str, content_type: str):
+    name = str(filename or "image")
+    ext = os.path.splitext(name)[1].lower()
+    mime = str(content_type or "").split(";", 1)[0].strip().lower()
+    if ext not in HEIF_IMAGE_EXTS and mime not in HEIF_IMAGE_MIMES:
+        return content, name, mime
+    try:
+        with Image.open(BytesIO(content)) as source:
+            image = ImageOps.exif_transpose(source).copy()
+        if image.mode in ("RGBA", "LA", "P"):
+            rgba = image.convert("RGBA")
+            rgb = Image.new("RGB", rgba.size, (255, 255, 255))
+            rgb.paste(rgba, mask=rgba.getchannel("A"))
+            image = rgb
+        else:
+            image = image.convert("RGB")
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=92)
+    except Exception as exc:
+        raise HTTPException(status_code=415, detail=f"HEIC/HEIF 图片无法解码：{exc}") from exc
+    return output.getvalue(), f"{os.path.splitext(name)[0] or 'image'}.jpg", "image/jpeg"
+
 @app.post("/api/ai/upload")
 async def upload_ai_reference(files: List[UploadFile] = File(...)):
     uploaded = []
-    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif"}
     video_exts = {".mp4", ".webm", ".mov", ".m4v", ".flv"}
     audio_exts = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
     doc_exts = {".pdf", ".txt", ".md", ".markdown", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".json", ".zip", ".yaml", ".yml", ".log"}
@@ -12088,10 +12123,13 @@ async def upload_ai_reference(files: List[UploadFile] = File(...)):
             continue
         if len(content) > max_upload_bytes:
             raise HTTPException(status_code=413, detail=f"{file.filename or '文件'} 超过 50MB，无法上传")
-        ext = os.path.splitext(file.filename or "")[1].lower()
-        content_type = (file.content_type or "").lower()
+        original_name = file.filename or ""
+        content, upload_name, content_type = normalize_heif_upload(content, original_name, file.content_type)
+        ext = os.path.splitext(upload_name)[1].lower()
         kind = "image"
-        if ext in video_exts or content_type.startswith("video/"):
+        if ext in image_exts:
+            kind = "image"
+        elif ext in video_exts or content_type.startswith("video/"):
             kind = "video"
             if ext not in video_exts:
                 ext = ".webm" if "webm" in content_type else ".mov" if "quicktime" in content_type else ".mp4"
@@ -12099,7 +12137,7 @@ async def upload_ai_reference(files: List[UploadFile] = File(...)):
             kind = "audio"
             if ext not in audio_exts:
                 ext = ".wav" if "wav" in content_type else ".ogg" if "ogg" in content_type else ".m4a" if "mp4" in content_type else ".mp3"
-        elif ext in image_exts or content_type.startswith("image/"):
+        elif content_type.startswith("image/"):
             kind = "image"
             if ext not in image_exts:
                 ext = ".jpg" if "jpeg" in content_type else ".webp" if "webp" in content_type else ".gif" if "gif" in content_type else ".png"
@@ -12115,7 +12153,7 @@ async def upload_ai_reference(files: List[UploadFile] = File(...)):
         path = output_path_for(filename, "input")
         with open(path, "wb") as f:
             f.write(content)
-        uploaded.append({"url": output_url_for(filename, "input"), "name": file.filename or filename, "kind": kind, "mime": content_type})
+        uploaded.append({"url": output_url_for(filename, "input"), "name": original_name or filename, "kind": kind, "mime": content_type})
     return {"files": uploaded}
 
 class Base64UploadRequest(BaseModel):
@@ -12141,7 +12179,8 @@ async def upload_ai_base64(payload: Base64UploadRequest):
         raise HTTPException(status_code=400, detail="内容为空")
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="超过 50MB")
-    kind, ext = _local_upload_kind_ext(payload.name or "", ct or "image/png")
+    content, upload_name, ct = normalize_heif_upload(content, payload.name or "", ct or "image/png")
+    kind, ext = _local_upload_kind_ext(upload_name, ct)
     if kind is None:
         kind, ext = "image", ".png"
     filename = f"ai_ref_{uuid.uuid4().hex[:12]}{ext}"
@@ -12165,7 +12204,8 @@ async def upload_comfyui_base64(payload: Base64UploadRequest):
         raise HTTPException(status_code=400, detail="数据无法解码")
     if not content:
         raise HTTPException(status_code=400, detail="内容为空")
-    _, ext = _local_upload_kind_ext(payload.name or "", ct or "image/png")
+    content, upload_name, ct = normalize_heif_upload(content, payload.name or "", ct or "image/png")
+    _, ext = _local_upload_kind_ext(upload_name, ct)
     filename = f"dx_{uuid.uuid4().hex[:12]}{ext or '.png'}"
     comfy_name = None
     for addr in COMFYUI_INSTANCES:
@@ -12181,11 +12221,13 @@ async def upload_comfyui_base64(payload: Base64UploadRequest):
     return {"name": comfy_name}
 
 def _local_upload_kind_ext(filename, content_type):
-    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif"}
     video_exts = {".mp4", ".webm", ".mov", ".m4v", ".flv"}
     audio_exts = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
     ext = os.path.splitext(filename or "")[1].lower()
     ct = (content_type or "").lower()
+    if ext in image_exts:
+        return "image", ext
     if ext in video_exts or ct.startswith("video/"):
         if ext not in video_exts:
             ext = ".webm" if "webm" in ct else ".mov" if "quicktime" in ct else ".mp4"
@@ -12194,7 +12236,7 @@ def _local_upload_kind_ext(filename, content_type):
         if ext not in audio_exts:
             ext = ".wav" if "wav" in ct else ".ogg" if "ogg" in ct else ".m4a" if "mp4" in ct else ".mp3"
         return "audio", ext
-    if ext in image_exts or ct.startswith("image/"):
+    if ct.startswith("image/"):
         if ext not in image_exts:
             ext = ".jpg" if "jpeg" in ct else ".webp" if "webp" in ct else ".gif" if "gif" in ct else ".png"
         return "image", ext
@@ -12463,10 +12505,12 @@ async def upload_local_assets(files: List[UploadFile] = File(...), folder: str =
         content = await file.read()
         if not content:
             continue
-        kind, ext = _local_upload_kind_ext(file.filename, file.content_type)
+        original_name = file.filename or ""
+        content, upload_name, content_type = normalize_heif_upload(content, original_name, file.content_type)
+        kind, ext = _local_upload_kind_ext(upload_name, content_type)
         if kind is None:
             continue
-        base = os.path.splitext(os.path.basename(file.filename or "file"))[0]
+        base = os.path.splitext(os.path.basename(original_name or "file"))[0]
         base = re.sub(r"[^0-9A-Za-z一-鿿._-]+", "_", base).strip("_") or "file"
         base = base[:60]
         filename = f"up_{uuid.uuid4().hex[:12]}_{base}{ext}"
@@ -13419,7 +13463,7 @@ async def jimeng_query_media(payload: JimengQueryMediaRequest):
 
 @app.get("/api/config")
 async def ai_config():
-    preferred_chat_model = next((m for m in CHAT_MODELS if m == "gpt-5.5"), CHAT_MODELS[0] if CHAT_MODELS else CHAT_MODEL)
+    preferred_chat_model = next((m for m in CHAT_MODELS if m == CODEX_DEFAULT_CHAT_MODELS[0]), CHAT_MODELS[0] if CHAT_MODELS else CHAT_MODEL)
     providers = public_api_providers()
     return {
         "base_url": AI_BASE_URL,

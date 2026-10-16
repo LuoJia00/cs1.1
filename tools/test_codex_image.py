@@ -14,13 +14,26 @@ class CodexImageTests(unittest.TestCase):
         with patch.object(main, 'codex_env_value', return_value=''):
             for alias in ('', 'gpt-image-2', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', '$imagegen'):
                 self.assertEqual(main.gpt_image_2_skill_model_arg(alias, 'codex'),
-                                 main.CODEX_DEFAULT_CHAT_MODELS[0])
-                self.assertNotEqual(main.gpt_image_2_skill_model_arg(alias, 'codex'), 'gpt-5.4')
+                                 'gpt-6.1-sol')
 
     def test_executor_override_and_explicit_model(self):
         with patch.object(main, 'codex_env_value', return_value='custom-executor'):
             self.assertEqual(main.gpt_image_2_skill_model_arg('gpt-image-2', 'codex'), 'custom-executor')
             self.assertEqual(main.gpt_image_2_skill_model_arg('explicit-executor', 'codex'), 'explicit-executor')
+
+    def test_retired_executor_in_saved_requests_and_overrides_is_migrated(self):
+        self.assertEqual(main.codex_model_for_exec('gpt-5.5'), 'gpt-6.1-sol')
+        with patch.object(main, 'codex_env_value', return_value='gpt-5.5'):
+            self.assertEqual(main.gpt_image_2_skill_model_arg('gpt-image-2', 'codex'), 'gpt-6.1-sol')
+            self.assertEqual(main.gpt_image_2_skill_model_arg('gpt-5.5', 'codex'), 'gpt-6.1-sol')
+
+    def test_saved_codex_models_are_migrated_without_changing_api_models(self):
+        providers = main.merge_default_api_providers([
+            {'id': 'codex', 'protocol': 'codex', 'chat_models': ['gpt-5.5', 'custom-executor', 'gpt-6.1-sol']},
+            {'id': 'api', 'protocol': 'openai', 'chat_models': ['gpt-5.5']},
+        ], inject_missing=False)
+        self.assertEqual(providers[0]['chat_models'], ['gpt-6.1-sol', 'custom-executor'])
+        self.assertEqual(providers[1]['chat_models'], ['gpt-5.5'])
 
     def test_openai_keeps_image_model(self):
         self.assertEqual(main.gpt_image_2_skill_model_arg('gpt-image-2', 'openai'), 'gpt-image-2')
@@ -57,7 +70,7 @@ class CodexImageTests(unittest.TestCase):
         self.assertEqual(main.gpt_image_2_skill_size_arg('1024x1024', provider='codex'), '1024x1024')
 
     def test_real_helper_http400_detail_is_visible(self):
-        detail = "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account."
+        detail = "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account."
         output = json.dumps({'ok': False, 'error': {
             'code': 'http_error', 'message': 'HTTP 400',
             'detail': json.dumps({'detail': detail}),

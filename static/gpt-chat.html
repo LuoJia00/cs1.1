@@ -676,7 +676,7 @@
         let modelPickerHome = null;
         let resolutionPickerHome = null;
         let refs = [];
-        let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2.5-sunburst', ms_chat_models: [] };
+        let config = { chat_model: 'gpt-6.1-sol', image_model: 'gpt-image-2.5-sunburst', ms_chat_models: [] };
 
         const SIZE_OPTIONS = {
             square: [['1024x1024','1k'], ['1536x1536','2k'], ['2048x2048','4k']],
@@ -849,7 +849,7 @@
                 const data = await fetch('/api/config').then(r=>r.json());
                 config = { ...config, ...data };
                 apiProviders = Array.isArray(config.api_providers) ? config.api_providers : [];
-                config.chat_model = (config.chat_models || []).find(m => m === 'gpt-5.5') || config.chat_model || 'gpt-5.5';
+                config.chat_model = (config.chat_models || []).find(m => m === 'gpt-6.1-sol') || config.chat_model || 'gpt-6.1-sol';
                 config.image_model = config.image_model || ((config.image_models || [])[0]) || 'gpt-image-2.5-sunburst';
                 validateSavedProviderState();
                 setMode(mode, false);

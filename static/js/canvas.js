@@ -47,19 +47,23 @@ function canvasProxiedMediaUrl(url, name=''){
 }
 function canvasDisplayMediaUrl(url, name=''){
     const raw = canvasOriginalMediaUrl(url);
+    const local = raw.startsWith('/assets/') || raw.startsWith('/output/');
+    const heif = /\.(heic|heif)(\?|#|$)/i.test(raw) || (/\.(heic|heif)$/i.test(String(name || '')) && !/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(raw));
+    if(local && heif) return `/api/image-jpeg?url=${encodeURIComponent(raw)}`;
     return /^https?:\/\//i.test(raw) ? canvasProxiedMediaUrl(raw, name) : raw;
 }
-function canvasMediaPreviewUrl(url, size=512){
+function canvasMediaPreviewUrl(url, size=512, name=''){
     const raw = canvasOriginalMediaUrl(url);
-    if(!raw || raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
-    if(!raw.startsWith('/output/') && !raw.startsWith('/assets/')) return canvasDisplayMediaUrl(raw);
-    if(!/\.(png|jpe?g|webp|gif|bmp|avif|tiff?|mp4|webm|mov|m4v|avi|mkv|flv)(\?|#|$)/i.test(raw)) return raw;
+    const display = canvasDisplayMediaUrl(raw, name);
+    if(!raw || raw.startsWith('data:') || raw.startsWith('blob:')) return display;
+    if(!raw.startsWith('/output/') && !raw.startsWith('/assets/')) return display;
+    if(!/\.(png|jpe?g|webp|gif|bmp|avif|tiff?|mp4|webm|mov|m4v|avi|mkv|flv)(\?|#|$)/i.test(raw)) return display;
     const width = Math.max(64, Math.min(2048, Math.round(Number(size) || 512)));
     return `/api/media-preview?w=${width}&url=${encodeURIComponent(raw)}`;
 }
-function canvasPreviewImgHtml(url, size=512, attrs=''){
+function canvasPreviewImgHtml(url, size=512, attrs='', name=''){
     const original = canvasOriginalMediaUrl(url);
-    const preview = canvasMediaPreviewUrl(original, size);
+    const preview = canvasMediaPreviewUrl(original, size, name);
     // loading=lazy：画布内容多时，视口外的缩略图不加载/不解码，避免一次性解码上百张图卡顿；
     // decoding=async：解码放到主线程外，渲染时不阻塞。
     return `<img loading="lazy" decoding="async" src="${escapeAttr(preview)}" data-preview-src="${escapeAttr(preview)}" data-original-src="${escapeAttr(original)}" data-url="${escapeAttr(original)}"${attrs ? ` ${attrs}` : ''}>`;
@@ -2535,7 +2539,7 @@ function addGroupNode(point){
 function pickMediaForNode(nodeId){
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,video/*,audio/*';
+    input.accept = 'image/*,.heic,.heif,video/*,audio/*';
     input.multiple = true;
     input.onchange = () => {
         if(input.files?.length) fillImageNode(nodeId, input.files, {group:input.files.length > 1});
@@ -3637,6 +3641,7 @@ function menuAdd(type){
 function mediaKindForUpload(file){
     const type = String(file?.type || '').toLowerCase();
     const name = String(file?.name || '').toLowerCase();
+    if(/\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)(\?|$)/.test(name)) return 'image';
     if(type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)(\?|$)/.test(name)) return 'video';
     if(type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name)) return 'audio';
     return 'image';
@@ -3645,7 +3650,7 @@ function isSupportedUploadFile(file){
     const type = String(file?.type || '').toLowerCase();
     const name = String(file?.name || '').toLowerCase();
     return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')
-        || /\.(png|jpe?g|webp|gif|bmp|avif|mp4|webm|mov|m4v|avi|mkv|mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name);
+        || /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif|mp4|webm|mov|m4v|avi|mkv|mp3|wav|m4a|aac|ogg|flac)(\?|$)/.test(name);
 }
 function dataTransferItemEntry(item){
     try { return item?.webkitGetAsEntry?.() || null; } catch { return null; }
@@ -3844,6 +3849,7 @@ function audioRefsOnly(refs){
     return (refs || []).filter(ref => ref?.url && mediaKindForRef(ref) === 'audio');
 }
 function mediaKindForNode(node){
+    if(/\.(heic|heif)$/i.test(String(node?.name || ''))) return 'image';
     if(node?.mediaKind) return node.mediaKind;
     if(isVideoUrl(node?.url)) return 'video';
     if(isAudioUrl(node?.url)) return 'audio';
@@ -3855,7 +3861,7 @@ function nodeTitleForMedia(node){
     if(kind === 'audio') return 'Audio';
     return 'Image';
 }
-const IMAGE_DROP_EXT_RE = /\.(png|jpe?g|webp|gif)$/i;
+const IMAGE_DROP_EXT_RE = /\.(png|jpe?g|webp|gif|heic|heif)$/i;
 const IMAGE_DROP_TEXT_TYPES = [
     'text/uri-list',
     'text/plain',
@@ -6172,7 +6178,7 @@ function renderNode(node){
             const missing = isMissingAssetUrl(node.url);
             const mediaKind = mediaKindForNode(node);
             const isEditableImage = mediaKind === 'image' && !missing;
-            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>`;
+            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"', node.name || '')}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>`;
             if(!missing && mediaKind !== 'image'){
                 const mediaHtml = mediaKind === 'video'
                     ? `<div class="media-card video-card">${canvasVideoPreviewHtml(node.url, 768, 'draggable="false" data-video-fallback-attrs="controls"')}<button class="canvas-video-play" type="button" title="播放"><i data-lucide="play"></i></button></div>`

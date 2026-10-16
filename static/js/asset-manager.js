@@ -112,7 +112,7 @@ let searchRenderTimer = null;
 let lastSearchCompositionEndAt = 0;
 let storageSettingsState = {open:false, tab:'prefs', editor:'', dirs:{}, defaults:{}, kind:'generated', items:[], selected:new Set(), loading:false, loadingMore:false, offset:0, total:0, hasMore:false, pageSize:80, restoreScrollTop:null, classificationPrompt:'', defaultClassificationPrompt:''};
 
-const LOCAL_MEDIA_EXTS = /\.(png|jpe?g|webp|gif|bmp|avif|svg|mp4|webm|mov|m4v|mp3|wav|flac|ogg|m4a|aac)(\?|#|$)/i;
+const LOCAL_MEDIA_EXTS = /\.(png|jpe?g|webp|gif|bmp|avif|heic|heif|svg|mp4|webm|mov|m4v|mp3|wav|flac|ogg|m4a|aac)(\?|#|$)/i;
 const SEARCH_INPUT_IDS = new Set(['assetSearch','workflowSearch','promptSearch','localSearch','localUploadSearch','canvasAssetSearch']);
 
 function refreshIcons(){ if(window.lucide) lucide.createIcons(); }
@@ -709,7 +709,7 @@ function assetPreviewUrl(url, w=256){
         try { path = new URL(raw).pathname; } catch(e) { return raw; }
     }
     if(!(path.startsWith('/output/') || path.startsWith('/assets/'))) return raw;
-    if(!/\.(png|jpe?g|webp|gif|bmp|avif|tiff?|mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(path)) return raw;
+    if(!/\.(png|jpe?g|webp|gif|bmp|avif|heic|heif|tiff?|mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(path)) return raw;
     const width = Math.max(64, Math.min(2048, Math.round(Number(w) || 256)));
     return `/api/media-preview?w=${width}&url=${encodeURIComponent(path)}`;
 }
@@ -3602,7 +3602,7 @@ async function handleClick(event){
     if(target.closest?.('[data-asset-copy-to-canvas]')){ copySelectedAssetsToCanvas(); return; }
     if(target.closest?.('[data-asset-delete-selected]')){ await deleteSelectedAssets(); return; }
     if(target.closest?.('[data-asset-upload]')){
-        if(uploadInput) uploadInput.accept = 'image/*,video/*,audio/*';
+        if(uploadInput) uploadInput.accept = 'image/*,.heic,.heif,video/*,audio/*';
         uploadInput?.click();
         return;
     }

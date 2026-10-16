@@ -43,7 +43,7 @@ set "CANVAS_PYTHON=%~dp0.venv\Scripts\python.exe"
 if errorlevel 1 goto failed
 "%CANVAS_PYTHON%" -m pip install -r requirements-lock.txt
 if errorlevel 1 goto failed
-"%CANVAS_PYTHON%" -c "import fastapi, uvicorn, requests, httpx, PIL, pydantic, multipart, websockets; print('Dependencies OK. You can start the app now.')"
+"%CANVAS_PYTHON%" -c "import fastapi, uvicorn, requests, httpx, PIL, pillow_heif, pydantic, multipart, websockets; print('Dependencies OK. You can start the app now.')"
 if errorlevel 1 goto failed
 if not defined NO_PAUSE pause
 exit /b 0
