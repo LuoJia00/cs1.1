@@ -1,4 +1,4 @@
-/* 三个数据源适配器：把 资产库 / 画布资产 / 本地素材 统一成 {id,name,url,kind,search}。
+/* 三个数据源适配器：把 资产库 / 画布资产 / 本地素材 统一成 {id,name,url,kind,search,createdAt}。
  * 每个适配器暴露：load / optionsA / optionsB / items / exportTarget / doExport。 */
 (function () {
   const state = DX.state;
@@ -19,6 +19,28 @@
       for (const v of Object.values(cls.categories)) if (Array.isArray(v)) parts.push(v.join(' '));
     }
     return parts.filter(Boolean).join(' ');
+  }
+
+  // 后端的图片/画布时间为毫秒，本地文件时间为秒，统一成毫秒。
+  function timestamp(value) {
+    if (value == null || value === '') return 0;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n > 0 ? (n < 1e12 ? n * 1000 : n) : 0;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  function sortItems(items, order) {
+    if (order !== 'newest' && order !== 'oldest') return items.slice();
+    const direction = order === 'oldest' ? 1 : -1;
+    return items.map((item, index) => ({ item, index })).sort((a, b) => {
+      const at = a.item.createdAt || 0;
+      const bt = b.item.createdAt || 0;
+      // 缺少时间的素材始终排在最后；同一时间保持原始顺序。
+      if (!at && bt) return 1;
+      if (at && !bt) return -1;
+      return direction * (at - bt) || a.index - b.index;
+    }).map((entry) => entry.item);
   }
 
   const adapters = {
@@ -46,6 +68,7 @@
         if (!cat || cat.type === 'workflow') return [];
         return (cat.items || []).map((it) => ({
           id: it.id, name: it.name || '未命名', url: it.url, kind: it.kind || 'image',
+          createdAt: timestamp(it.created_at),
           search: `${it.name || ''} ${it.caption || ''} ${classificationText(it.classification)}`.toLowerCase(),
         }));
       },
@@ -81,6 +104,7 @@
         if (bId && bId !== '__all__') list = list.filter((it) => it.canvas_id === bId);
         return list.map((it) => ({
           id: it.id, name: it.name || '未命名', url: it.url, kind: it.kind || 'image',
+          createdAt: timestamp(it.created_at) || timestamp(it.canvas_updated_at) || timestamp(it.canvas_created_at),
           search: `${it.name || ''} ${it.canvas_title || ''} ${it.node_title || ''}`.toLowerCase(),
         }));
       },
@@ -111,6 +135,7 @@
         if (bId) list = list.filter((it) => it.folder === bId || String(it.folder || '').startsWith(`${bId}/`));
         return list.map((it) => ({
           id: it.id, name: it.name || '未命名', url: it.url, kind: it.kind || 'image',
+          createdAt: timestamp(it.created_at),
           search: `${it.name || ''} ${it.caption || ''} ${classificationText(it.classification)}`.toLowerCase(),
         }));
       },
@@ -133,5 +158,6 @@
     adapter() { return adapters[state.source]; },
     itemIsImage,
     classificationText,
+    sortItems,
   };
 })();

@@ -513,6 +513,16 @@ button[disabled], .primary[disabled], .primary-sm[disabled], .btn[disabled], .ic
   flex: 1 1 auto;
 }
 
+.filters #search {
+  min-width: 0;
+}
+
+#sortOrder {
+  flex: 0 0 112px;
+  width: 112px;
+  min-width: 0;
+}
+
 .grid {
   flex: 1 1 auto;
   min-height: 0;

@@ -15,6 +15,7 @@
     selA: $('selectA'),
     selB: $('selectB'),
     search: $('search'),
+    sortOrder: $('sortOrder'),
     refresh: $('refreshBtn'),
     count: $('count'),
     grid: $('grid'),
@@ -73,7 +74,7 @@
     // 排除视频/音频：这是图像工具，且视频项没有图片预览，避免出现大量"未加载"的占位
     let list = currentItems().filter((it) => it.kind !== 'video' && it.kind !== 'audio');
     if (q) list = list.filter((it) => (it.search || '').includes(q));
-    return list;
+    return sources.sortItems(list, state.sortOrder);
   }
   function selectedItem() { return currentItems().find((it) => it.id === state.selectedId) || null; }
 
@@ -96,9 +97,9 @@
     DX.ui.fillPicker(els.selB, optsB.map((o) => ({ value: o.id, label: o.name })), state.bId);
   }
 
-  // 已加载网格 DOM 缓存：key=源|分库|分组。切回时直接复原这批已解码的 <img>，不再重新请求。
+  // 已加载网格 DOM 缓存：key=源|分库|分组|排序。切回时直接复原这批已解码的 <img>，不再重新请求。
   const gridViews = {};
-  function gridKey() { return `${state.source}|${state.aId}|${state.bId}`; }
+  function gridKey() { return `${state.source}|${state.aId}|${state.bId}|${state.sortOrder}`; }
   function invalidateGridCacheFor(src) { for (const k in gridViews) { if (k.indexOf(`${src}|`) === 0) delete gridViews[k]; } }
 
   function renderGrid() {
@@ -119,7 +120,10 @@
       els.grid.className = 'grid';
       els.grid.innerHTML = '';
       els.grid.appendChild(gridViews[key]);
-      els.count.textContent = `${all.length} 个素材`;
+      const cards = gridViews[key].querySelectorAll('.card');
+      cards.forEach((card) => card.classList.toggle('selected', card.getAttribute('data-id') === state.selectedId));
+      page = Math.max(1, Math.ceil(cards.length / PAGE));
+      els.count.textContent = cards.length < all.length ? `${all.length} 个素材（已显示 ${cards.length}）` : `${all.length} 个素材`;
       if (gridViews[key].querySelector('img[data-src]')) loadThumbs(myToken);   // 补全未加载完的
       renderActions();
       return;
@@ -376,6 +380,13 @@
   });
 
   let searchTimer = null;
+  DX.ui.onPick(els.sortOrder, () => {
+    state.sortOrder = DX.ui.pickerValue(els.sortOrder);
+    localStorage.setItem(DX.LS.sortOrder, state.sortOrder);
+    page = 1;
+    els.grid.scrollTop = 0;
+    renderGrid();
+  });
   els.search.addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { page = 1; renderGrid(); }, 200);   // 防抖，少重绘
@@ -411,6 +422,13 @@
     els.exportLayer.checked = state.exportLayer;
     const savedSource = localStorage.getItem(DX.LS.source);
     if (savedSource && sources.adapters[savedSource]) state.source = savedSource;
+    const savedSortOrder = localStorage.getItem(DX.LS.sortOrder);
+    if (['newest', 'oldest', 'default'].includes(savedSortOrder)) state.sortOrder = savedSortOrder;
+    DX.ui.fillPicker(els.sortOrder, [
+      { value: 'newest', label: '最新优先' },
+      { value: 'oldest', label: '最早优先' },
+      { value: 'default', label: '默认顺序' },
+    ], state.sortOrder);
     setDot('off');
     renderSources();
     renderActions();

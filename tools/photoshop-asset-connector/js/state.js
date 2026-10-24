@@ -4,6 +4,7 @@ window.DX = window.DX || {};
 DX.LS = {
   host: 'daxiong.assets.host',
   source: 'daxiong.assets.source',
+  sortOrder: 'daxiong.assets.sortOrder',
   exportLayer: 'daxiong.assets.exportLayer',
 };
 
@@ -12,6 +13,7 @@ DX.state = {
   connected: false,
   tab: 'assets',                 // assets | generate | settings
   source: 'assets',              // assets | canvas | local
+  sortOrder: 'newest',           // newest | oldest | default
   raw: { assets: null, canvas: null, local: null },
   aId: '',
   bId: '',
