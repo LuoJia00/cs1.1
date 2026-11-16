@@ -5057,6 +5057,28 @@ def codex_decode_output(stdout, stderr):
     return out_text, err_text
 
 
+def codex_cli_failure_message(stdout_text="", stderr_text="", returncode=0):
+    # Progress and the full prompt precede the real error in human-readable
+    # exec output. Prefer the final error over truncating the startup banner.
+    for output in (stderr_text, stdout_text):
+        for line in reversed(str(output or "").splitlines()):
+            line = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+            match = re.match(r"ERROR:\s*(.+)", line, re.I)
+            if match:
+                messages = gpt_image_2_skill_error_messages(match.group(1))
+                if messages:
+                    return "；".join(dict.fromkeys(messages))[:1200]
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("type") in {"error", "turn.failed"}:
+                messages = gpt_image_2_skill_error_messages(event)
+                if messages:
+                    return "；".join(dict.fromkeys(messages))[:1200]
+    return str(stderr_text or stdout_text or f"exit={returncode}")[-1200:]
+
+
 async def run_captured_subprocess(args, cwd=None, input_data=None, timeout=None):
     """Run a captured child process with a Windows pipe fallback.
 
@@ -5158,8 +5180,8 @@ async def run_codex_cli(prompt, model="", image_paths=None, timeout=None, output
         except Exception:
             pass
     if returncode != 0:
-        message = err_text or out_text or last_text or f"exit={returncode}"
-        raise HTTPException(status_code=502, detail=f"OpenAI Codex CLI 调用失败：{message[:1200]}")
+        message = codex_cli_failure_message(out_text or last_text, err_text, returncode)
+        raise HTTPException(status_code=502, detail=f"OpenAI Codex CLI 调用失败：{message}")
     return {"text": last_text or out_text, "_stdout": out_text, "_stderr": err_text}
 
 def codex_output_image_files(since_time=0):

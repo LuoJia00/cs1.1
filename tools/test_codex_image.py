@@ -99,6 +99,23 @@ class CodexImageTests(unittest.TestCase):
         output = json.dumps({'ok': False, 'error': {'code': 'token_expired'}})
         self.assertEqual(main.gpt_image_2_skill_failure_message(output, '', 1), 'token_expired')
 
+    def test_cli_error_after_long_prompt_is_visible(self):
+        detail = "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account."
+        error = json.dumps({'error': {'message': detail, 'code': 'model_not_found'}})
+        stderr = 'OpenAI Codex v0.153.4\nuser\n' + 'long prompt ' * 500 + '\nERROR: ' + error
+        self.assertEqual(main.codex_cli_failure_message('', stderr, 1), detail)
+
+    def test_cli_json_error_is_not_hidden_by_stderr_warnings(self):
+        detail = 'Your session has expired. Please log in again.'
+        stdout = json.dumps({'type': 'turn.failed', 'error': {'message': json.dumps({'error': {'message': detail}})}})
+        self.assertEqual(main.codex_cli_failure_message(stdout, 'WARNING: startup warning', 1), detail)
+
+    def test_cli_unstructured_errors_keep_the_end_and_exit_code(self):
+        self.assertEqual(main.codex_cli_failure_message('', '', 9), 'exit=9')
+        message = main.codex_cli_failure_message('', 'startup ' * 500 + '\nconnection refused', 1)
+        self.assertTrue(message.endswith('connection refused'))
+        self.assertLessEqual(len(message), 1200)
+
 
 class CodexModelTests(unittest.IsolatedAsyncioTestCase):
     def test_sunburst_request_keeps_executor_and_image_model_separate(self):
